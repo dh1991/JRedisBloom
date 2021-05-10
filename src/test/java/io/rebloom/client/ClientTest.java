@@ -2,11 +2,16 @@ package io.rebloom.client;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.exceptions.JedisException;
 
 import static junit.framework.TestCase.*;
+import static org.junit.Assert.assertThrows;
 
 import java.util.Arrays;
+import java.util.Map;
 
 /**
  * @author Mark Nunberg
@@ -22,12 +27,23 @@ public class ClientTest {
         }
     }
 
-    Client cl = null;
+    private Client cl = null;
 
     @Before
     public void clearDb() {
         cl = new Client("localhost", port);
         cl._conn().flushDB();
+    }
+    
+    @Test
+    public void createWithPool() {
+      Client refClient;
+      try(Client client = new Client(new JedisPool("localhost", port))){
+        refClient = client;
+        client.createFilter("createBloom", 100, 0.001);
+        assertTrue(client.delete("createBloom"));
+      }
+      assertThrows(JedisException.class, () -> refClient.createFilter("myBloom", 100, 0.001));
     }
 
     @Test
@@ -70,6 +86,7 @@ public class ClientTest {
         assertFalse(cl.exists("newFilter", "bar".getBytes()));
     }
 
+    @Test
     public void testExistsNonExist() {
       assertFalse(cl.exists("nonExist", "foo"));
     }
@@ -150,4 +167,27 @@ public class ClientTest {
       assertTrue( cl.topkList("aaa").stream().allMatch( s -> Arrays.asList("bb", "cc", "ff").contains(s) || s == null));
     }
 
+    @Test
+    public void testInsert() {
+        cl.insert("b1", new InsertOptions().capacity(1L), "1");
+        assertTrue(cl.exists("b1", "1"));
+
+        // returning an error if the filter does not already exist
+        Exception exception = assertThrows(JedisDataException.class, () -> cl.insert("b2", new InsertOptions().nocreate(), "1"));
+        assertEquals("ERR not found", exception.getMessage());
+
+        cl.insert("b3", new InsertOptions().capacity(1L).error(0.0001), "2");
+        assertTrue(cl.exists("b3", "2"));
+    }
+
+    @Test
+    public void testInfo() {
+        cl.insert("test_info", new InsertOptions().capacity(1L), "1");
+        Map<String, Object> info = cl.info("test_info");
+        assertEquals("1", info.get("Number of items inserted").toString());
+
+        // returning an error if the filter does not already exist
+        Exception exception = assertThrows(JedisDataException.class, () -> cl.info("not_exist"));
+        assertEquals("ERR not found", exception.getMessage());
+    }
 }

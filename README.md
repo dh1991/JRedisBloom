@@ -5,8 +5,11 @@
 [![Javadocs](https://www.javadoc.io/badge/com.redislabs/jrebloom.svg)](https://www.javadoc.io/doc/com.redislabs/jrebloom)
 [![Codecov](https://codecov.io/gh/RedisBloom/JRedisBloom/branch/master/graph/badge.svg)](https://codecov.io/gh/RedisBloom/JRedisBloom)
 [![Language grade: Java](https://img.shields.io/lgtm/grade/java/g/RedisBloom/JRedisBloom.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/RedisBloom/JRedisBloom/context:java)
+[![Known Vulnerabilities](https://snyk.io/test/github/RedisBloom/JRedisBloom/badge.svg?targetFile=pom.xml)](https://snyk.io/test/github/RedisBloom/JRedisBloom?targetFile=pom.xml)
 
 # JRedisBloom
+[![Forum](https://img.shields.io/badge/Forum-RedisBloom-blue)](https://forum.redislabs.com/c/modules/redisbloom)
+[![Discord](https://img.shields.io/discord/697882427875393627?style=flat-square)](https://discord.gg/wXhwjCQ)
 
 A Java Client Library for [RedisBloom](https://redisbloom.io)
 
@@ -25,7 +28,7 @@ See [http://redisbloom.io](http://redisbloom.io) for installation instructions o
     <dependency>
       <groupId>com.redislabs</groupId>
       <artifactId>jrebloom</artifactId>
-      <version>1.2.0</version>
+      <version>2.1.0</version>
     </dependency>
   </dependencies>
 ```
@@ -47,7 +50,7 @@ and
     <dependency>
       <groupId>com.redislabs</groupId>
       <artifactId>jrebloom</artifactId>
-      <version>2.0.0-SNAPSHOT</version>
+      <version>2.2.0-SNAPSHOT</version>
     </dependency>
   </dependencies>
 ```
@@ -108,6 +111,3 @@ cclient.exists("simpleBloom", "Farnsworth"); // False
 ```
 
 all method of ClusterClient is same to Client.
-
-
-

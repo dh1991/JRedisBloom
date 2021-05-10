@@ -8,7 +8,9 @@ public enum Command implements ProtocolCommand {
     ADD("BF.ADD"),
     MADD("BF.MADD"),
     EXISTS("BF.EXISTS"),
-    MEXISTS("BF.MEXISTS");
+    MEXISTS("BF.MEXISTS"),
+    INSERT("BF.INSERT"),
+    INFO("BF.INFO");
 
     private final byte[] raw;
 

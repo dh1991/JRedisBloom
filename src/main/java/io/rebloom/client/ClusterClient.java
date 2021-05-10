@@ -12,6 +12,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * @author TommyYang on 2018/12/17
@@ -111,6 +113,7 @@ public class ClusterClient extends JedisCluster {
      */
     public boolean createFilter(String name, long initCapacity, double errorRate) {
         return (new JedisClusterCommand<Boolean>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public Boolean execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 conn.sendCommand(Command.RESERVE, name, errorRate + "", initCapacity + "");
@@ -126,13 +129,7 @@ public class ClusterClient extends JedisCluster {
      * @return true if the item was not previously in the filter.
      */
     public boolean add(String name, String value) {
-        return (new JedisClusterCommand<Boolean>(this.connectionHandler, this.maxAttempts) {
-            public Boolean execute(Jedis connection) {
-                Connection conn = connection.getClient();
-                conn.sendCommand(Command.ADD, name, value);
-                return conn.getIntegerReply() != 0;
-            }
-        }).run(name);
+      return add(name, SafeEncoder.encode(value));
     }
 
     /**
@@ -143,6 +140,7 @@ public class ClusterClient extends JedisCluster {
      */
     public boolean add(String name, byte[] value) {
         return (new JedisClusterCommand<Boolean>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public Boolean execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 conn.sendCommand(Command.ADD, name.getBytes(), value);
@@ -151,6 +149,29 @@ public class ClusterClient extends JedisCluster {
         }).run(name);
     }
 
+    /**
+     * add one or more items to the bloom filter, by default creating it if it does not yet exist
+     *
+     * @param name The name of the filter
+     * @param options {@link io.rebloom.client.InsertOptions}
+     * @param items items to add to the filter
+     * @return
+     */
+    public boolean[] insert(String name, InsertOptions options, String... items) {
+        return (new JedisClusterCommand<boolean[]>(this.connectionHandler, this.maxAttempts) {
+            @Override
+            public boolean[] execute(Jedis connection) {
+                Connection conn = connection.getClient();
+                final List<byte[]> args = new ArrayList<>();
+                args.addAll(options.getOptions());
+                args.add(Keywords.ITEMS.getRaw());
+                for (String item : items) {
+                    args.add(SafeEncoder.encode(item));
+                }
+                return sendMultiCommand(conn, Command.INSERT, name.getBytes(), args.toArray(new byte[args.size()][]));
+            }
+        }).run(name);
+    }
 
     /**
      * Check if an item exists in the filter
@@ -159,13 +180,7 @@ public class ClusterClient extends JedisCluster {
      * @return true if the item may exist in the filter, false if the item does not exist in the filter
      */
     public boolean exists(String name, String value) {
-        return (new JedisClusterCommand<Boolean>(this.connectionHandler, this.maxAttempts) {
-            public Boolean execute(Jedis connection) {
-                Connection conn = connection.getClient();
-                conn.sendCommand(Command.EXISTS, name, value);
-                return conn.getIntegerReply() != 0;
-            }
-        }).run(name);
+        return exists(name, SafeEncoder.encode(value));
     }
 
     /**
@@ -176,6 +191,7 @@ public class ClusterClient extends JedisCluster {
      */
     public boolean exists(String name, byte[] value) {
         return (new JedisClusterCommand<Boolean>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public Boolean execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 conn.sendCommand(Command.EXISTS, name.getBytes(), value);
@@ -197,6 +213,7 @@ public class ClusterClient extends JedisCluster {
      */
     public boolean[] addMulti(String name, byte[]... values){
         return (new JedisClusterCommand<boolean[]>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public boolean[] execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 return sendMultiCommand(conn, Command.MADD, name.getBytes(), values);
@@ -206,6 +223,7 @@ public class ClusterClient extends JedisCluster {
 
     public boolean[] addMulti(String name, String... values){
         return (new JedisClusterCommand<boolean[]>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public boolean[] execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 return sendMultiCommand(conn, Command.MADD, name, values);
@@ -221,6 +239,7 @@ public class ClusterClient extends JedisCluster {
      */
     public boolean[] existsMulti(String name, byte[]... values) {
         return (new JedisClusterCommand<boolean[]>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public boolean[] execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 return sendMultiCommand(conn, Command.MEXISTS, name.getBytes(), values);
@@ -230,6 +249,7 @@ public class ClusterClient extends JedisCluster {
 
     public boolean[] existsMulti(String name, String... values) {
         return (new JedisClusterCommand<boolean[]>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public boolean[] execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 return sendMultiCommand(conn, Command.MEXISTS, name, values);
@@ -244,10 +264,37 @@ public class ClusterClient extends JedisCluster {
      */
     public boolean delete(String name) {
         return (new JedisClusterCommand<Boolean>(this.connectionHandler, this.maxAttempts) {
+            @Override
             public Boolean execute(Jedis connection) {
                 Connection conn = connection.getClient();
                 ((Client) conn).del(name);
                 return conn.getIntegerReply() != 0;
+            }
+        }).run(name);
+    }
+
+    /**
+     * Get information about the filter
+     * @param name
+     * @return Return information
+     */
+    public Map<String, Object> info(String name) {
+        return (new JedisClusterCommand<Map<String, Object>>(this.connectionHandler, this.maxAttempts) {
+            @Override
+            public Map<String, Object> execute(Jedis connection) {
+                Connection conn = connection.getClient();
+                conn.sendCommand(Command.INFO, name.getBytes());
+                List<Object> values = conn.getObjectMultiBulkReply();
+
+                Map<String, Object> infoMap = new HashMap<>(values.size() / 2);
+                for (int i = 0; i < values.size(); i += 2) {
+                    Object val = values.get(i + 1);
+                    if (val instanceof byte[]) {
+                        val = SafeEncoder.encode((byte[]) val);
+                    }
+                    infoMap.put(SafeEncoder.encode((byte[]) values.get(i)), val);
+                }
+                return infoMap;
             }
         }).run(name);
     }
@@ -388,10 +435,10 @@ public class ClusterClient extends JedisCluster {
         arr.addAll(Arrays.asList(value));
         List<Long> reps;
         if (name instanceof String) {
-            conn.sendCommand(cmd, (String[]) arr.toArray((String[]) value));
+            conn.sendCommand(cmd, arr.toArray((String[]) value));
             reps = conn.getIntegerMultiBulkReply();
         } else {
-            conn.sendCommand(cmd, (byte[][]) arr.toArray((byte[][]) value));
+            conn.sendCommand(cmd, arr.toArray((byte[][]) value));
             reps = conn.getIntegerMultiBulkReply();
         }
         boolean[] ret = new boolean[value.length];

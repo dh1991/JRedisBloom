@@ -12,19 +12,21 @@ import redis.clients.jedis.ClusterReset;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisCluster;
+import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.exceptions.JedisException;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static junit.framework.TestCase.*;
+import static org.junit.Assert.assertThrows;
 
 
 /**
  * @author TommyYang on 2018/12/17
  */
-@Ignore
 public class ClusterClientTest {
 
 
@@ -138,10 +140,10 @@ public class ClusterClientTest {
         ccl.createFilter("myBloom", 100, 0);
     }
 
-    @Test(expected = JedisException.class)
+    @Test
     public void reserveAlreadyExists() {
         assertTrue(ccl.createFilter("myBloom", 100, 0.1));
-        ccl.createFilter("myBloom", 100, 0.1);
+        assertThrows(JedisException.class, () -> ccl.createFilter("myBloom", 100, 0.1));
     }
 
     @Test
@@ -212,5 +214,29 @@ public class ClusterClientTest {
         assertEquals(null, ccl.topkIncrBy("aaa", "ff", 10));
 
         assertTrue(ccl.topkList("aaa").stream().allMatch(s -> Arrays.asList("bb", "cc", "ff").contains(s) || s == null));
+    }
+
+    @Test
+    public void testInsert() {
+        ccl.insert("b1", new InsertOptions().capacity(1L), "1");
+        assertTrue(ccl.exists("b1", "1"));
+
+        // returning an error if the filter does not already exist
+        Exception exception = assertThrows(JedisDataException.class, () -> ccl.insert("b2", new InsertOptions().nocreate(), "1"));
+        assertEquals("ERR not found", exception.getMessage());
+
+        ccl.insert("b3", new InsertOptions().capacity(1L).error(0.0001), "2");
+        assertTrue(ccl.exists("b3", "2"));
+    }
+
+    @Test
+    public void testInfo() {
+        ccl.insert("test_info", new InsertOptions().capacity(1L), "1");
+        Map<String, Object> info = ccl.info("test_info");
+        assertEquals("1", info.get("Number of items inserted").toString());
+
+        // returning an error if the filter does not already exist
+        Exception exception = assertThrows(JedisDataException.class, () -> ccl.info("not_exist"));
+        assertEquals("ERR not found", exception.getMessage());
     }
 }
